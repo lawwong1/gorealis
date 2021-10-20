@@ -77,7 +77,7 @@ func (j *JobUpdate) BatchSize(size int32) *JobUpdate {
 
 // Minimum number of seconds a shard must remain in RUNNING state before considered a success.
 func (j *JobUpdate) WatchTime(timeout time.Duration) *JobUpdate {
-	j.request.Settings.MinWaitInInstanceRunningMs = int32(timeout.Seconds() * 1000)
+	j.request.Settings.MinWaitInInstanceRunningMs = int32(timeout.Milliseconds())
 	return j
 }
 

@@ -41,6 +41,3 @@ _testmain.go
 # Example client build
 examples/client
 examples/jsonClient
-
-# Use checksum database
-go.sum

@@ -94,7 +94,7 @@ func TestBadCredentials(t *testing.T) {
 	job := realis.NewJob().
 		Environment("prod").
 		Role("vagrant").
-		Name("create_thermos_job_test").
+		Name("create_thermos_job_bad_creds_test").
 		ThermosExecutor(thermosExec).
 		CPU(.5).
 		RAM(64).
@@ -209,7 +209,6 @@ func TestValidAuroraURL(t *testing.T) {
 }
 
 func TestRealisClient_ReestablishConn(t *testing.T) {
-
 	// Test that we're able to tear down the old connection and create a new one.
 	err := r.ReestablishConn()
 
@@ -220,11 +219,9 @@ func TestGetCACerts(t *testing.T) {
 	certs, err := realis.GetCerts("./examples/certs")
 	assert.NoError(t, err)
 	assert.Equal(t, len(certs.Subjects()), 2)
-
 }
 
 func TestRealisClient_CreateJob_Thermos(t *testing.T) {
-
 	role := "vagrant"
 	job := realis.NewJob().
 		Environment("prod").
@@ -251,7 +248,7 @@ func TestRealisClient_CreateJob_Thermos(t *testing.T) {
 
 	// Fetch all Jobs
 	result, err := r.GetJobs(role)
-	fmt.Printf("GetJobs length: %+v \n", len(result.Configs))
+	fmt.Println("GetJobs length: ", len(result.Configs))
 	assert.Len(t, result.Configs, 1)
 	assert.NoError(t, err)
 
@@ -272,7 +269,7 @@ func TestRealisClient_CreateJob_Thermos(t *testing.T) {
 		err := r.KillJob(job.JobKey())
 		assert.NoError(t, err)
 
-		success, err := r.MonitorInstances(job.JobKey(), 0, 1*time.Second, 60*time.Second)
+		success, err := r.MonitorInstances(job.JobKey(), 0, 1*time.Second, 90*time.Second)
 		assert.True(t, success)
 		assert.NoError(t, err)
 	})
@@ -280,7 +277,6 @@ func TestRealisClient_CreateJob_Thermos(t *testing.T) {
 
 // Test configuring an executor that doesn't exist for CreateJob API
 func TestRealisClient_CreateJob_ExecutorDoesNotExist(t *testing.T) {
-
 	// Create a single job
 	job := realis.NewJob().
 		Environment("prod").
@@ -299,7 +295,6 @@ func TestRealisClient_CreateJob_ExecutorDoesNotExist(t *testing.T) {
 
 // Test configuring an executor that doesn't exist for CreateJob API
 func TestRealisClient_GetPendingReason(t *testing.T) {
-
 	env := "prod"
 	role := "vagrant"
 	name := "pending_reason_test"
@@ -333,7 +328,6 @@ func TestRealisClient_GetPendingReason(t *testing.T) {
 }
 
 func TestRealisClient_CreateService_WithPulse_Thermos(t *testing.T) {
-
 	fmt.Println("Creating service")
 	role := "vagrant"
 	job := realis.NewJobUpdate().
@@ -813,18 +807,15 @@ func TestRealisClient_BatchAwareAutoPause(t *testing.T) {
 	job := realis.NewJob().
 		Environment("prod").
 		Role("vagrant").
-		Name("BatchAwareAutoPauseTest").
+		Name("batch_aware_auto_pause_test").
 		ThermosExecutor(thermosExec).
 		CPU(.01).
 		RAM(4).
 		Disk(10).
 		InstanceCount(6).
-		IsService(true).
-		Production(false).
-		Tier("preemptible").
-		Priority(0)
+		IsService(true)
 
-	updateGroups := []int32{1, 2, 3}
+	updateGroups := []int32{1, 3}
 	strategy := realis.JobUpdateFromAuroraTask(job.AuroraTask()).
 		VariableBatchStrategy(true, updateGroups...).
 		InstanceCount(6).
@@ -837,22 +828,28 @@ func TestRealisClient_BatchAwareAutoPause(t *testing.T) {
 	key := *result.GetKey()
 
 	for i := range updateGroups {
-		curStep, mErr := r.MonitorAutoPausedUpdate(key, time.Second*5, time.Second*240)
+		curStep, mErr := r.MonitorAutoPausedUpdate(key, time.Second*5, time.Minute*5)
 		if mErr != nil {
+			fmt.Println(mErr)
 			// Update may already be in a terminal state so don't check for error
-			assert.NoError(t, r.AbortJobUpdate(key, "Monitor timed out."))
+			_ = r.AbortJobUpdate(key, "Monitor timed out.")
 		}
 
 		assert.Equal(t, i, curStep)
-		require.NoError(t, r.ResumeJobUpdate(key, "auto resuming test"))
+
+		if i != len(updateGroups)-1 {
+			require.NoError(t, err)
+			require.NoError(t, r.ResumeJobUpdate(key, "auto resuming test"))
+		}
 	}
+	assert.NoError(t, r.AbortJobUpdate(key, ""))
 	assert.NoError(t, r.KillJob(strategy.JobKey()))
 }
 
 func TestRealisClient_GetJobSummary(t *testing.T) {
 	role := "vagrant"
 	env := "prod"
-	name := "GetJobSummaryJob"
+	name := "test_get_job_summary"
 	// Create a single job
 	job := realis.NewJob().
 		Environment(env).
@@ -863,14 +860,10 @@ func TestRealisClient_GetJobSummary(t *testing.T) {
 		RAM(4).
 		Disk(10).
 		InstanceCount(3).
-		WatchTime(20 * time.Second).
 		IsService(true).
 		Production(false).
 		Tier("preemptible").
-		Priority(0).
-		BatchSize(2)
-
-	result, err := r.CreateService(job)
+		Priority(0)
 
 	err := r.CreateJob(job)
 	assert.NoError(t, err)

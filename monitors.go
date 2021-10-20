@@ -245,7 +245,7 @@ func (c *Client) MonitorHostMaintenance(hosts []string,
 	}
 }
 
-// AutoPaused monitor is a special monitor for auto pause enabled batch updates. This monitor ensures that the update
+// MonitorAutoPausedUpdate is a special monitor for auto pause enabled batch updates. This monitor ensures that the update
 // being monitored is capable of auto pausing and has auto pausing enabled. After verifying this information,
 // the monitor watches for the job to enter the ROLL_FORWARD_PAUSED state and calculates the current batch
 // the update is in using information from the update configuration.
@@ -294,8 +294,9 @@ func (c *Client) MonitorAutoPausedUpdate(key aurora.JobUpdateKey, interval, time
 		return -1, err
 	}
 
-	// Summary 0 is assumed to exist because MonitorJobUpdateQuery will return an error if there is Summaries
-	if summary[0].State.Status != aurora.JobUpdateStatus_ROLL_FORWARD_PAUSED {
+	// Summary 0 is assumed to exist because MonitorJobUpdateQuery will return an error if there is no summaries
+	if !(summary[0].State.Status == aurora.JobUpdateStatus_ROLL_FORWARD_PAUSED ||
+		summary[0].State.Status == aurora.JobUpdateStatus_ROLLED_FORWARD) {
 		return -1, errors.Errorf("update is in a terminal state %v", summary[0].State.Status)
 	}
 
