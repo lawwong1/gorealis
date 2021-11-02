@@ -612,6 +612,39 @@ func TestRealisClient_SLADrainHosts(t *testing.T) {
 		5*time.Second,
 		10*time.Second)
 	assert.NoError(t, err)
+
+	// slaDrainHosts goes with default policy if no policy is specified
+	_, err = r.SLADrainHosts(nil, 30, hosts...)
+	if err != nil {
+		fmt.Printf("error: %+v\n", err.Error())
+		os.Exit(1)
+	}
+	hostResults, err = r.MonitorHostMaintenance(
+		hosts,
+		[]aurora.MaintenanceMode{aurora.MaintenanceMode_DRAINED, aurora.MaintenanceMode_DRAINING},
+		1*time.Second,
+		50*time.Second)
+	assert.Equal(t, map[string]bool{"localhost": true}, hostResults)
+	assert.NoError(t, err)
+
+	_, err = r.EndMaintenance(hosts...)
+	assert.NoError(t, err)
+
+	_, err = r.SLADrainHosts(&aurora.SlaPolicy{}, 30, hosts...)
+	if err != nil {
+		fmt.Printf("error: %+v\n", err.Error())
+		os.Exit(1)
+	}
+	hostResults, err = r.MonitorHostMaintenance(
+		hosts,
+		[]aurora.MaintenanceMode{aurora.MaintenanceMode_DRAINED, aurora.MaintenanceMode_DRAINING},
+		1*time.Second,
+		50*time.Second)
+	assert.Equal(t, map[string]bool{"localhost": true}, hostResults)
+	assert.NoError(t, err)
+
+	_, err = r.EndMaintenance(hosts...)
+	assert.NoError(t, err)
 }
 
 // Test multiple go routines using a single connection

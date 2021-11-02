@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/apache/thrift/lib/go/thrift"
+	"github.com/aurora-scheduler/gorealis/v2/gen-go/apache/aurora"
 )
 
 type clientConfig struct {
@@ -47,6 +48,15 @@ var defaultBackoff = Backoff{
 	Factor:   5.0,
 	Jitter:   0.1,
 }
+
+var defaultSlaPolicy = aurora.SlaPolicy{
+	PercentageSlaPolicy: &aurora.PercentageSlaPolicy{
+		Percentage:   66,
+		DurationSecs: 300,
+	},
+}
+
+const defaultSlaDrainTimeoutSecs = 900
 
 type TransportProtocol int
 
