@@ -41,13 +41,64 @@ services:
       MESOS_MASTER: zk://192.168.33.2:2181/mesos
       MESOS_CONTAINERIZERS: docker,mesos
       MESOS_PORT: 5051
-      MESOS_HOSTNAME: localhost
+      MESOS_HOSTNAME: agent-one
       MESOS_RESOURCES: ports(*):[11000-11999]
       MESOS_SYSTEMD_ENABLE_SUPPORT: 'false'
       MESOS_WORK_DIR: /tmp/mesos
+      MESOS_ATTRIBUTES: 'host:agent-one;rack:1;zone:west'
     networks:
       aurora_cluster:
         ipv4_address: 192.168.33.4
+
+    volumes:
+    - /sys/fs/cgroup:/sys/fs/cgroup
+    - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+    - zk
+
+  agent-two:
+    image: quay.io/aurorascheduler/mesos-agent:1.9.0
+    pid: host
+    restart: on-failure
+    ports:
+    - "5052:5051"
+    environment:
+      MESOS_MASTER: zk://192.168.33.2:2181/mesos
+      MESOS_CONTAINERIZERS: docker,mesos
+      MESOS_PORT: 5051
+      MESOS_HOSTNAME: agent-two
+      MESOS_RESOURCES: ports(*):[11000-11999]
+      MESOS_SYSTEMD_ENABLE_SUPPORT: 'false'
+      MESOS_WORK_DIR: /tmp/mesos
+      MESOS_ATTRIBUTES: 'host:agent-two;rack:2;zone:west'
+    networks:
+      aurora_cluster:
+        ipv4_address: 192.168.33.5
+
+    volumes:
+    - /sys/fs/cgroup:/sys/fs/cgroup
+    - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+    - zk
+
+  agent-three:
+    image: quay.io/aurorascheduler/mesos-agent:1.9.0
+    pid: host
+    restart: on-failure
+    ports:
+    - "5053:5051"
+    environment:
+      MESOS_MASTER: zk://192.168.33.2:2181/mesos
+      MESOS_CONTAINERIZERS: docker,mesos
+      MESOS_PORT: 5051
+      MESOS_HOSTNAME: agent-three
+      MESOS_RESOURCES: ports(*):[11000-11999]
+      MESOS_SYSTEMD_ENABLE_SUPPORT: 'false'
+      MESOS_WORK_DIR: /tmp/mesos
+      MESOS_ATTRIBUTES: 'host:agent-three;rack:2;zone:west;dedicated:vagrant/bar'
+    networks:
+      aurora_cluster:
+        ipv4_address: 192.168.33.6
 
     volumes:
     - /sys/fs/cgroup:/sys/fs/cgroup

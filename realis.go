@@ -147,6 +147,8 @@ func NewClient(options ...ClientOption) (*Client, error) {
 		return nil, errors.New("incomplete Options -- url, cluster.json, or Zookeeper address required")
 	}
 
+	config.url = url
+
 	url, err = validateAuroraAddress(url)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to create realis object, invalid url")
@@ -840,4 +842,8 @@ func (c *Client) RollbackJobUpdate(key aurora.JobUpdateKey, message string) erro
 		return errors.Wrap(retryErr, "unable to roll back job update")
 	}
 	return nil
+}
+
+func (c *Client) GetSchedulerURL() string {
+	return c.config.url
 }

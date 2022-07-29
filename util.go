@@ -104,3 +104,23 @@ func calculateCurrentBatch(updatingInstances int32, batchSizes []int32) int {
 	}
 	return batchCount
 }
+
+func ResourcesToMap(resources []*aurora.Resource) map[string]float64 {
+	result := map[string]float64{}
+
+	for _, resource := range resources {
+		if resource.NumCpus != nil {
+			result["cpus"] += *resource.NumCpus
+		} else if resource.RamMb != nil {
+			result["mem"] += float64(*resource.RamMb)
+		} else if resource.DiskMb != nil {
+			result["disk"] += float64(*resource.DiskMb)
+		} else if resource.NamedPort != nil {
+			result["ports"]++
+		} else if resource.NumGpus != nil {
+			result["gpus"] += float64(*resource.NumGpus)
+		}
+	}
+
+	return result
+}

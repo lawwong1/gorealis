@@ -325,6 +325,10 @@ func TestRealisClient_GetPendingReason(t *testing.T) {
 
 	err = r.KillJob(job.JobKey())
 	assert.NoError(t, err)
+
+	success, err := r.MonitorInstances(job.JobKey(), 0, 1*time.Second, 90*time.Second)
+	assert.True(t, success)
+	assert.NoError(t, err)
 }
 
 func TestRealisClient_CreateService_WithPulse_Thermos(t *testing.T) {
@@ -410,6 +414,10 @@ pulseLoop:
 
 	err = r.KillJob(job.JobKey())
 	assert.NoError(t, err)
+
+	success, err := r.MonitorInstances(job.JobKey(), 0, 1*time.Second, 90*time.Second)
+	assert.True(t, success)
+	assert.NoError(t, err)
 }
 
 // Test configuring an executor that doesn't exist for CreateJob API
@@ -454,7 +462,10 @@ func TestRealisClient_CreateService(t *testing.T) {
 
 	// Kill task test task after confirming it came up fine
 	err = r.KillJob(job.JobKey())
+	assert.NoError(t, err)
 
+	success, err := r.MonitorInstances(job.JobKey(), 0, 1*time.Second, 90*time.Second)
+	assert.True(t, success)
 	assert.NoError(t, err)
 }
 
@@ -513,10 +524,17 @@ func TestRealisClient_ScheduleCronJob_Thermos(t *testing.T) {
 	t.Run("TestRealisClient_DeschedulerCronJob_Thermos", func(t *testing.T) {
 		err := r.DescheduleCronJob(job.JobKey())
 		assert.NoError(t, err)
+
+		err = r.KillJob(job.JobKey())
+		assert.NoError(t, err)
+
+		success, err := r.MonitorInstances(job.JobKey(), 0, 1*time.Second, 90*time.Second)
+		assert.True(t, success)
+		assert.NoError(t, err)
 	})
 }
 func TestRealisClient_StartMaintenance(t *testing.T) {
-	hosts := []string{"localhost"}
+	hosts := []string{"agent-one"}
 	_, err := r.StartMaintenance(hosts...)
 	assert.NoError(t, err)
 
@@ -526,7 +544,7 @@ func TestRealisClient_StartMaintenance(t *testing.T) {
 		[]aurora.MaintenanceMode{aurora.MaintenanceMode_SCHEDULED},
 		1*time.Second,
 		50*time.Second)
-	assert.Equal(t, map[string]bool{"localhost": true}, hostResults)
+	assert.Equal(t, map[string]bool{"agent-one": true}, hostResults)
 	assert.NoError(t, err)
 
 	_, err = r.EndMaintenance(hosts...)
@@ -542,7 +560,7 @@ func TestRealisClient_StartMaintenance(t *testing.T) {
 }
 
 func TestRealisClient_DrainHosts(t *testing.T) {
-	hosts := []string{"localhost"}
+	hosts := []string{"agent-one"}
 	_, err := r.DrainHosts(hosts...)
 	assert.NoError(t, err)
 
@@ -552,7 +570,7 @@ func TestRealisClient_DrainHosts(t *testing.T) {
 		[]aurora.MaintenanceMode{aurora.MaintenanceMode_DRAINED, aurora.MaintenanceMode_DRAINING},
 		1*time.Second,
 		50*time.Second)
-	assert.Equal(t, map[string]bool{"localhost": true}, hostResults)
+	assert.Equal(t, map[string]bool{"agent-one": true}, hostResults)
 	assert.NoError(t, err)
 
 	t.Run("TestRealisClient_MonitorNontransitioned", func(t *testing.T) {
@@ -565,7 +583,7 @@ func TestRealisClient_DrainHosts(t *testing.T) {
 
 		// Assert monitor returned an error that was not nil, and also a list of the non-transitioned hosts
 		assert.Error(t, err)
-		assert.Equal(t, map[string]bool{"localhost": true, "IMAGINARY_HOST": false}, hostResults)
+		assert.Equal(t, map[string]bool{"agent-one": true, "IMAGINARY_HOST": false}, hostResults)
 	})
 
 	t.Run("TestRealisClient_EndMaintenance", func(t *testing.T) {
@@ -584,7 +602,7 @@ func TestRealisClient_DrainHosts(t *testing.T) {
 }
 
 func TestRealisClient_SLADrainHosts(t *testing.T) {
-	hosts := []string{"localhost"}
+	hosts := []string{"agent-one"}
 	policy := aurora.SlaPolicy{PercentageSlaPolicy: &aurora.PercentageSlaPolicy{Percentage: 50.0}}
 
 	_, err := r.SLADrainHosts(&policy, 30, hosts...)
@@ -599,7 +617,7 @@ func TestRealisClient_SLADrainHosts(t *testing.T) {
 		[]aurora.MaintenanceMode{aurora.MaintenanceMode_DRAINED, aurora.MaintenanceMode_DRAINING},
 		1*time.Second,
 		50*time.Second)
-	assert.Equal(t, map[string]bool{"localhost": true}, hostResults)
+	assert.Equal(t, map[string]bool{"agent-one": true}, hostResults)
 	assert.NoError(t, err)
 
 	_, err = r.EndMaintenance(hosts...)
@@ -624,7 +642,7 @@ func TestRealisClient_SLADrainHosts(t *testing.T) {
 		[]aurora.MaintenanceMode{aurora.MaintenanceMode_DRAINED, aurora.MaintenanceMode_DRAINING},
 		1*time.Second,
 		50*time.Second)
-	assert.Equal(t, map[string]bool{"localhost": true}, hostResults)
+	assert.Equal(t, map[string]bool{"agent-one": true}, hostResults)
 	assert.NoError(t, err)
 
 	_, err = r.EndMaintenance(hosts...)
@@ -640,7 +658,7 @@ func TestRealisClient_SLADrainHosts(t *testing.T) {
 		[]aurora.MaintenanceMode{aurora.MaintenanceMode_DRAINED, aurora.MaintenanceMode_DRAINING},
 		1*time.Second,
 		50*time.Second)
-	assert.Equal(t, map[string]bool{"localhost": true}, hostResults)
+	assert.Equal(t, map[string]bool{"agent-one": true}, hostResults)
 	assert.NoError(t, err)
 
 	_, err = r.EndMaintenance(hosts...)
@@ -681,6 +699,9 @@ func TestRealisClient_SessionThreadSafety(t *testing.T) {
 			err = r.KillJob(job.JobKey())
 			assert.NoError(t, err)
 
+			success, err = r.MonitorInstances(job.JobKey(), 0, 1*time.Second, 90*time.Second)
+			assert.True(t, success)
+			assert.NoError(t, err)
 		}()
 	}
 
@@ -767,6 +788,12 @@ func TestRealisClient_PartitionPolicy(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
+	err = r.KillJob(job.JobKey())
+	assert.NoError(t, err)
+
+	success, err := r.MonitorInstances(job.JobKey(), 0, 1*time.Second, 90*time.Second)
+	assert.True(t, success)
+	assert.NoError(t, err)
 }
 
 func TestRealisClient_UpdateStrategies(t *testing.T) {
@@ -831,6 +858,10 @@ func TestRealisClient_UpdateStrategies(t *testing.T) {
 				assert.NoError(t, r.AbortJobUpdate(key, "Monitor timed out."))
 			}
 			assert.NoError(t, r.KillJob(strategy.jobUpdate.JobKey()))
+
+			success, err := r.MonitorInstances(strategy.jobUpdate.JobKey(), 0, 1*time.Second, 90*time.Second)
+			assert.True(t, success)
+			assert.NoError(t, err)
 		})
 	}
 }
@@ -877,6 +908,10 @@ func TestRealisClient_BatchAwareAutoPause(t *testing.T) {
 	}
 	assert.NoError(t, r.AbortJobUpdate(key, ""))
 	assert.NoError(t, r.KillJob(strategy.JobKey()))
+
+	success, err := r.MonitorInstances(job.JobKey(), 0, 1*time.Second, 90*time.Second)
+	assert.True(t, success)
+	assert.NoError(t, err)
 }
 
 func TestRealisClient_GetJobSummary(t *testing.T) {
@@ -924,4 +959,460 @@ func TestRealisClient_GetJobSummary(t *testing.T) {
 
 	err = r.KillJob(job.JobKey())
 	assert.NoError(t, err)
+
+	success, err = r.MonitorInstances(job.JobKey(), 0, 1*time.Second, 90*time.Second)
+	assert.True(t, success)
+	assert.NoError(t, err)
+}
+
+func TestRealisClient_Offers(t *testing.T) {
+	var offers []realis.Offer
+
+	// since offers are being recycled, it take a few tries to get all of them.
+	i := 0
+	for ; len(offers) < 3 && i < 5; i++ {
+		offers, _ = r.Offers()
+		time.Sleep(5 * time.Second)
+	}
+
+	assert.NotEqual(t, i, 5)
+}
+
+func TestRealisClient_MaintenanceHosts(t *testing.T) {
+	offers, err := r.Offers()
+	assert.NoError(t, err)
+
+	for i := 0; i < len(offers); i++ {
+		_, err := r.DrainHosts(offers[i].Hostname)
+		assert.NoError(t, err)
+
+		hosts, err := r.MaintenanceHosts()
+		assert.Equal(t, i+1, len(hosts))
+	}
+
+	// clean up
+	for i := 0; i < len(offers); i++ {
+		_, err := r.EndMaintenance(offers[i].Hostname)
+		assert.NoError(t, err)
+
+		// Monitor change to DRAINING and DRAINED mode
+		_, err = r.MonitorHostMaintenance(
+			[]string{offers[i].Hostname},
+			[]aurora.MaintenanceMode{aurora.MaintenanceMode_NONE},
+			5*time.Second,
+			10*time.Second)
+		assert.NoError(t, err)
+	}
+}
+
+func TestRealisClient_AvailOfferReport(t *testing.T) {
+	var offers []realis.Offer
+
+	i := 0
+	for ; len(offers) < 3 && i < 5; i++ {
+		offers, _ = r.Offers()
+		time.Sleep(5 * time.Second)
+	}
+
+	assert.NotEqual(t, i, 3)
+
+	capacity, err := r.AvailOfferReport()
+	assert.NoError(t, err)
+
+	// 2 groups for non-dedicated & dedicated
+	assert.Equal(t, 2, len(capacity))
+	// 4 resources: cpus, disk, mem, ports
+	assert.Equal(t, 4, len(capacity["non-dedicated"]))
+}
+
+func TestRealisClient_FitTasks(t *testing.T) {
+	var offers []realis.Offer
+
+	i := 0
+	for ; len(offers) < 3 && i < 5; i++ {
+		offers, _ = r.Offers()
+		time.Sleep(5 * time.Second)
+	}
+
+	assert.NotEqual(t, i, 5)
+
+	cpuPerOffer := 0.0
+	for _, r := range offers[0].Resources {
+		if r.Name == "cpus" {
+			cpuPerOffer = r.Scalar.Value
+		}
+	}
+
+	// make sure all offers have no running executor
+	for _, o := range offers {
+		assert.Equal(t, o.ExecutorIds[:0], o.ExecutorIds)
+	}
+
+	validCpu := cpuPerOffer / 2
+	inValidCpu := cpuPerOffer + 1
+	gpu := int64(1)
+
+	tests := []struct {
+		message     string
+		role        string
+		request     aurora.Resource
+		constraints []*aurora.Constraint
+		expected    int64
+		isError     bool
+	}{
+		{
+			message: "task with gpu request",
+			role:    "vagrant",
+			request: aurora.Resource{
+				NumGpus: &gpu,
+			},
+			expected: 0,
+			isError:  false,
+		},
+		{
+			message:  "empty resource request",
+			role:     "vagrant",
+			request:  aurora.Resource{},
+			expected: -1,
+			isError:  true,
+		},
+		{
+			message: "valid resource request",
+			role:    "vagrant",
+			request: aurora.Resource{
+				NumCpus: &validCpu,
+			},
+			expected: 4,
+			isError:  false,
+		},
+		{
+			message: "invalid cpu request",
+			role:    "vagrant",
+			request: aurora.Resource{
+				NumCpus: &inValidCpu,
+			},
+			expected: 0,
+			isError:  false,
+		},
+		{
+			message: "dedicated constraint",
+			role:    "vagrant",
+			request: aurora.Resource{
+				NumCpus: &validCpu,
+			},
+
+			constraints: []*aurora.Constraint{
+				{
+					Name: "dedicated",
+					Constraint: &aurora.TaskConstraint{
+						Value: &aurora.ValueConstraint{
+							Negated: false,
+							Values:  []string{"vagrant/bar"},
+						},
+					},
+				},
+			},
+			expected: 2,
+			isError:  false,
+		},
+		{
+			message: "dedicated constraint with unauthorized role",
+			role:    "unauthorized",
+			request: aurora.Resource{
+				NumCpus: &validCpu,
+			},
+			constraints: []*aurora.Constraint{
+				{
+					Name: "dedicated",
+					Constraint: &aurora.TaskConstraint{
+						Value: &aurora.ValueConstraint{
+							Negated: false,
+							Values:  []string{"vagrant/bar"},
+						},
+					},
+				},
+			},
+			expected: 0,
+			isError:  false,
+		},
+		{
+			message: "value constraint on zone",
+			role:    "vagrant",
+			request: aurora.Resource{
+				NumCpus: &validCpu,
+			},
+			constraints: []*aurora.Constraint{
+				{
+					Name: "zone",
+					Constraint: &aurora.TaskConstraint{
+						Value: &aurora.ValueConstraint{
+							Negated: false,
+							Values:  []string{"west"},
+						},
+					},
+				},
+			},
+			expected: 4,
+			isError:  false,
+		},
+		{
+			message: "negative value constraint on zone",
+			role:    "vagrant",
+			request: aurora.Resource{
+				NumCpus: &validCpu,
+			},
+			constraints: []*aurora.Constraint{
+				{
+					Name: "zone",
+					Constraint: &aurora.TaskConstraint{
+						Value: &aurora.ValueConstraint{
+							Negated: true,
+							Values:  []string{"west"},
+						},
+					},
+				},
+			},
+			expected: 0,
+			isError:  false,
+		},
+		{
+			message: "negative value constraint on host",
+			role:    "vagrant",
+			request: aurora.Resource{
+				NumCpus: &validCpu,
+			},
+			constraints: []*aurora.Constraint{
+				{
+					Name: "host",
+					Constraint: &aurora.TaskConstraint{
+						Value: &aurora.ValueConstraint{
+							Negated: true,
+							Values:  []string{"agent-one"},
+						},
+					},
+				},
+			},
+			expected: 2,
+			isError:  false,
+		},
+		{
+			message: "value constraint on unavailable zone",
+			role:    "vagrant",
+			request: aurora.Resource{
+				NumCpus: &validCpu,
+			},
+			constraints: []*aurora.Constraint{
+				{
+					Name: "zone",
+					Constraint: &aurora.TaskConstraint{
+						Value: &aurora.ValueConstraint{
+							Negated: false,
+							Values:  []string{"east"},
+						},
+					},
+				},
+			},
+			expected: 0,
+			isError:  false,
+		},
+		{
+			message: "value constraint on unavailable attribute",
+			role:    "vagrant",
+			request: aurora.Resource{
+				NumCpus: &validCpu,
+			},
+			constraints: []*aurora.Constraint{
+				{
+					Name: "os",
+					Constraint: &aurora.TaskConstraint{
+						Value: &aurora.ValueConstraint{
+							Negated: false,
+							Values:  []string{"windows"},
+						},
+					},
+				},
+			},
+			expected: 0,
+			isError:  false,
+		},
+		{
+			message: "1 value constraint with 2 values",
+			role:    "vagrant",
+			request: aurora.Resource{
+				NumCpus: &validCpu,
+			},
+			constraints: []*aurora.Constraint{
+				{
+					Name: "host",
+					Constraint: &aurora.TaskConstraint{
+						Value: &aurora.ValueConstraint{
+							Negated: false,
+							Values:  []string{"agent-one", "agent-two"},
+						},
+					},
+				},
+			},
+			expected: 4,
+			isError:  false,
+		},
+		{
+			message: "2 value constraints",
+			role:    "vagrant",
+			request: aurora.Resource{
+				NumCpus: &validCpu,
+			},
+			constraints: []*aurora.Constraint{
+				{
+					Name: "host",
+					Constraint: &aurora.TaskConstraint{
+						Value: &aurora.ValueConstraint{
+							Negated: false,
+							Values:  []string{"agent-one"},
+						},
+					},
+				},
+				{
+					Name: "rack",
+					Constraint: &aurora.TaskConstraint{
+						Value: &aurora.ValueConstraint{
+							Negated: false,
+							Values:  []string{"2"},
+						},
+					},
+				},
+			},
+			expected: 0,
+			isError:  false,
+		},
+		{
+			message: "limit constraint on host",
+			role:    "vagrant",
+			request: aurora.Resource{
+				NumCpus: &validCpu,
+			},
+			constraints: []*aurora.Constraint{
+				{
+					Name: "host",
+					Constraint: &aurora.TaskConstraint{
+						Limit: &aurora.LimitConstraint{
+							Limit: 1,
+						},
+					},
+				},
+			},
+			expected: 2,
+			isError:  false,
+		},
+		{
+			message: "limit constraint on zone",
+			role:    "vagrant",
+			request: aurora.Resource{
+				NumCpus: &validCpu,
+			},
+			constraints: []*aurora.Constraint{
+				{
+					Name: "zone",
+					Constraint: &aurora.TaskConstraint{
+						Limit: &aurora.LimitConstraint{
+							Limit: 1,
+						},
+					},
+				},
+			},
+			expected: 1,
+			isError:  false,
+		},
+		{
+			message: "limit constraint on zone & host",
+			role:    "vagrant",
+			request: aurora.Resource{
+				NumCpus: &validCpu,
+			},
+			constraints: []*aurora.Constraint{
+				{
+					Name: "host",
+					Constraint: &aurora.TaskConstraint{
+						Limit: &aurora.LimitConstraint{
+							Limit: 1,
+						},
+					},
+				},
+				{
+					Name: "zone",
+					Constraint: &aurora.TaskConstraint{
+						Limit: &aurora.LimitConstraint{
+							Limit: 1,
+						},
+					},
+				},
+			},
+			expected: 1,
+			isError:  false,
+		},
+		{
+			message: "limit constraint on unavailable zone",
+			role:    "vagrant",
+			request: aurora.Resource{
+				NumCpus: &validCpu,
+			},
+			constraints: []*aurora.Constraint{
+				{
+					Name: "gpu-host", // no host has gpu-host attribute
+					Constraint: &aurora.TaskConstraint{
+						Limit: &aurora.LimitConstraint{
+							Limit: 1,
+						},
+					},
+				},
+			},
+			expected: 0,
+			isError:  false,
+		},
+		{
+			message: "limit & dedicated constraint",
+			role:    "vagrant",
+			request: aurora.Resource{
+				NumCpus: &validCpu,
+			},
+			constraints: []*aurora.Constraint{
+				{
+					Name: "dedicated",
+					Constraint: &aurora.TaskConstraint{
+						Value: &aurora.ValueConstraint{
+							Negated: false,
+							Values:  []string{"vagrant/bar"},
+						},
+					},
+				},
+				{
+					Name: "host",
+					Constraint: &aurora.TaskConstraint{
+						Limit: &aurora.LimitConstraint{
+							Limit: 1,
+						},
+					},
+				},
+			},
+			expected: 1,
+			isError:  false,
+		},
+	}
+
+	for _, tc := range tests {
+		task := aurora.NewTaskConfig()
+		task.Resources = []*aurora.Resource{&tc.request}
+		task.Constraints = tc.constraints
+		task.Job = &aurora.JobKey{
+			Role: tc.role,
+		}
+
+		numTasks, err := r.FitTasks(task, offers)
+
+		if !tc.isError {
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expected, numTasks, tc.message)
+		} else {
+			assert.Error(t, err)
+		}
+	}
 }
