@@ -180,6 +180,35 @@ func TestLeaderFromZK(t *testing.T) {
 	assert.Equal(t, "http://192.168.33.7:8081", url)
 
 }
+
+func TestMasterFromZK(t *testing.T) {
+	cluster := realis.GetDefaultClusterFromZKUrl("192.168.33.2:2181")
+	masterNodesMap, err := realis.MasterNodesFromZK(*cluster)
+
+	assert.NoError(t, err)
+
+	for _, hostnames := range masterNodesMap {
+		for _, hostname := range hostnames {
+			assert.NoError(t, err)
+			assert.Equal(t, "192.168.33.7", hostname)
+		}
+	}
+}
+
+func TestMesosMasterFromZK(t *testing.T) {
+	cluster := realis.GetDefaultClusterFromZKUrl("192.168.33.2:2181")
+	masterNodesMap, err := realis.MesosMasterNodesFromZK(*cluster)
+
+	assert.NoError(t, err)
+
+	for _, hostnames := range masterNodesMap {
+		for _, hostname := range hostnames {
+			assert.NoError(t, err)
+			assert.Equal(t, "localhost", hostname)
+		}
+	}
+}
+
 func TestInvalidAuroraURL(t *testing.T) {
 	for _, url := range []string{
 		"http://doesntexist.com:8081/apitest",

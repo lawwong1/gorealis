@@ -28,6 +28,7 @@ type Cluster struct {
 	ZK            string `json:"zk"`
 	ZKPort        int    `json:"zk_port"`
 	SchedZKPath   string `json:"scheduler_zk_path"`
+	MesosZKPath   string `json:"mesos_zk_path"`
 	SchedURI      string `json:"scheduler_uri"`
 	ProxyURL      string `json:"proxy_url"`
 	AuthMechanism string `json:"auth_mechanism"`
@@ -61,6 +62,7 @@ func GetDefaultClusterFromZKUrl(zkURL string) *Cluster {
 		AuthMechanism: "UNAUTHENTICATED",
 		ZK:            zkURL,
 		SchedZKPath:   "/aurora/scheduler",
+		MesosZKPath:   "/mesos",
 		AgentRunDir:   "latest",
 		AgentRoot:     "/var/lib/mesos",
 	}

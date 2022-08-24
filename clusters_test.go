@@ -32,6 +32,7 @@ func TestLoadClusters(t *testing.T) {
 	assert.Equal(t, clusters["devcluster"].Name, "devcluster")
 	assert.Equal(t, clusters["devcluster"].ZK, "192.168.33.7")
 	assert.Equal(t, clusters["devcluster"].SchedZKPath, "/aurora/scheduler")
+	assert.Equal(t, clusters["devcluster"].MesosZKPath, "/mesos")
 	assert.Equal(t, clusters["devcluster"].AuthMechanism, "UNAUTHENTICATED")
 	assert.Equal(t, clusters["devcluster"].AgentRunDir, "latest")
 	assert.Equal(t, clusters["devcluster"].AgentRoot, "/var/lib/mesos")
