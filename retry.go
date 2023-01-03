@@ -17,10 +17,7 @@ package realis
 import (
 	"io"
 	"math/rand"
-	"net/http"
 	"net/url"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/apache/thrift/lib/go/thrift"
@@ -29,9 +26,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Backoff determines how the retry mechanism should react after each failure and how many failures it should
+// tolerate.
 type Backoff struct {
 	Duration time.Duration // the base duration
-	Factor   float64       // Duration is multipled by factor each iteration
+	Factor   float64       // Duration is multiplied by a factor each iteration
 	Jitter   float64       // The amount of jitter applied each iteration
 	Steps    int           // Exit with error after this many steps
 }
@@ -53,18 +52,15 @@ func Jitter(duration time.Duration, maxFactor float64) time.Duration {
 // if the loop should be aborted.
 type ConditionFunc func() (done bool, err error)
 
-// Modified version of the Kubernetes exponential-backoff code.
-// ExponentialBackoff repeats a condition check with exponential backoff.
-//
-// It checks the condition up to Steps times, increasing the wait by multiplying
-// the previous duration by Factor.
+// ExponentialBackoff is a modified version of the Kubernetes exponential-backoff code.
+// It repeats a condition check with exponential backoff and checks the condition up to
+// Steps times, increasing the wait by multiplying the previous duration by Factor.
 //
 // If Jitter is greater than zero, a random amount of each duration is added
 // (between duration and duration*(1+jitter)).
 //
 // If the condition never returns true, ErrWaitTimeout is returned. Errors
 // do not cause the function to return.
-
 func ExponentialBackoff(backoff Backoff, logger Logger, condition ConditionFunc) error {
 	var err error
 	var ok bool
@@ -98,10 +94,9 @@ func ExponentialBackoff(backoff Backoff, logger Logger, condition ConditionFunc)
 			// If the error is temporary, continue retrying.
 			if !IsTemporary(err) {
 				return err
-			} else {
-				// Print out the temporary error we experienced.
-				logger.Println(err)
 			}
+			// Print out the temporary error we experienced.
+			logger.Println(err)
 		}
 	}
 
@@ -112,19 +107,28 @@ func ExponentialBackoff(backoff Backoff, logger Logger, condition ConditionFunc)
 	// Provide more information to the user wherever possible
 	if err != nil {
 		return newRetryError(errors.Wrap(err, "ran out of retries"), curStep)
-	} else {
-		return newRetryError(errors.New("ran out of retries"), curStep)
 	}
+
+	return newRetryError(errors.New("ran out of retries"), curStep)
 }
 
 type auroraThriftCall func() (resp *aurora.Response, err error)
 
+// verifyOntimeout defines the type of function that will be used to verify whether a Thirft call to the Scheduler
+// made it to the scheduler or not. In general, these types of functions will have to interact with the scheduler
+// through the very same Thrift API which previously encountered a time out from the client.
+// This means that the functions themselves should be kept to a minimum number of Thrift calls.
+// It should also be noted that this is a best effort mechanism and
+// is likely to fail for the same reasons that the original call failed.
+type verifyOnTimeout func() (*aurora.Response, bool)
+
 // Duplicates the functionality of ExponentialBackoff but is specifically targeted towards ThriftCalls.
-func (c *Client) thriftCallWithRetries(returnOnTimeout bool, thriftCall auroraThriftCall) (*aurora.Response, error) {
+func (c *Client) thriftCallWithRetries(returnOnTimeout bool, thriftCall auroraThriftCall,
+	verifyOnTimeout verifyOnTimeout) (*aurora.Response, error) {
 	var resp *aurora.Response
 	var clientErr error
 	var curStep int
-	var timeouts int
+	timeouts := 0
 
 	backoff := c.config.backoff
 	duration := backoff.Duration
@@ -138,7 +142,10 @@ func (c *Client) thriftCallWithRetries(returnOnTimeout bool, thriftCall auroraTh
 				adjusted = Jitter(duration, backoff.Jitter)
 			}
 
-			c.logger.Printf("A retryable error occurred during thrift call, backing off for %v before retry %v\n", adjusted, curStep)
+			c.logger.Printf(
+				"A retryable error occurred during thrift call, backing off for %v before retry %v",
+				adjusted,
+				curStep)
 
 			time.Sleep(adjusted)
 			duration = time.Duration(float64(duration) * backoff.Factor)
@@ -153,105 +160,132 @@ func (c *Client) thriftCallWithRetries(returnOnTimeout bool, thriftCall auroraTh
 
 			resp, clientErr = thriftCall()
 
-			c.logger.TracePrintf("Aurora Thrift Call ended resp: %v clientErr: %v\n", resp, clientErr)
+			c.logger.TracePrintf("Aurora Thrift Call ended resp: %v clientErr: %v", resp, clientErr)
 		}()
 
 		// Check if our thrift call is returning an error. This is a retryable event as we don't know
 		// if it was caused by network issues.
 		if clientErr != nil {
-
 			// Print out the error to the user
-			c.logger.Printf("Client Error: %v\n", clientErr)
+			c.logger.Printf("Client Error: %v", clientErr)
 
-			// Determine if error is a temporary URL error by going up the stack
-			e, ok := clientErr.(thrift.TTransportException)
-			if ok {
-				c.logger.DebugPrint("Encountered a transport exception")
+			temporary, timedout := isConnectionError(clientErr)
+			if !temporary && c.RealisConfig().failOnPermanentErrors {
+				return nil, errors.Wrap(clientErr, "permanent connection error")
+			}
 
-				// TODO(rdelvalle): Figure out a better way to obtain the error code as this is a very brittle solution
-				// 401 Unauthorized means the wrong username and password were provided
-				if strings.Contains(e.Error(), strconv.Itoa(http.StatusUnauthorized)) {
-					return nil, errors.Wrap(clientErr, "wrong username or password provided")
-				}
-
-				e, ok := e.Err().(*url.Error)
-				if ok {
-					// EOF error occurs when the server closes the read buffer of the client. This is common
-					// when the server is overloaded and should be retried. All other errors that are permanent
-					// will not be retried.
-					if e.Err != io.EOF && !e.Temporary() && c.RealisConfig().failOnPermanentErrors {
-						return nil, errors.Wrap(clientErr, "permanent connection error")
-					}
-					// Corner case where thrift payload was received by Aurora but connection timedout before Aurora was
-					// able to reply. In this case we will return whatever response was received and a TimedOut behaving
-					// error. Users can take special action on a timeout by using IsTimedout and reacting accordingly.
-					if e.Timeout() {
-						timeouts++
-						c.logger.DebugPrintf(
-							"Client closed connection (timedout) %d times before server responded,"+
-								" consider increasing connection timeout",
-							timeouts)
-						if returnOnTimeout {
-							return resp,
-								newTimedoutError(errors.New("client connection closed before server answer"))
-						}
-					}
-				}
+			// There exists a corner case where thrift payload was received by Aurora but
+			// connection timed out before Aurora was able to reply.
+			// Users can take special action on a timeout by using IsTimedout and reacting accordingly
+			// if they have configured the client to return on a timeout.
+			if timedout && returnOnTimeout {
+				return resp, newTimedoutError(errors.New("client connection closed before server answer"))
 			}
 
 			// In the future, reestablish connection should be able to check if it is actually possible
 			// to make a thrift call to Aurora. For now, a reconnect should always lead to a retry.
 			// Ignoring error due to the fact that an error should be retried regardless
-			_ = c.ReestablishConn()
-
-		} else {
-
-			// If there was no client error, but the response is nil, something went wrong.
-			// Ideally, we'll never encounter this but we're placing a safeguard here.
-			if resp == nil {
-				return nil, errors.New("response from aurora is nil")
+			reestablishErr := c.ReestablishConn()
+			if reestablishErr != nil {
+				c.logger.DebugPrintf("error re-establishing connection ", reestablishErr)
 			}
 
-			// Check Response Code from thrift and make a decision to continue retrying or not.
-			switch responseCode := resp.GetResponseCode(); responseCode {
+			// If users did not opt for a return on timeout in order to react to a timedout error,
+			// attempt to verify that the call made it to the scheduler after the connection was re-established.
+			if timedout {
+				timeouts++
+				c.logger.DebugPrintf(
+					"Client closed connection %d times before server responded, "+
+						"consider increasing connection timeout",
+					timeouts)
 
-			// If the thrift call succeeded, stop retrying
-			case aurora.ResponseCode_OK:
-				return resp, nil
-
-			// If the response code is transient, continue retrying
-			case aurora.ResponseCode_ERROR_TRANSIENT:
-				c.logger.Println("Aurora replied with Transient error code, retrying")
-				continue
-
-			// Failure scenarios, these indicate a bad payload or a bad clientConfig. Stop retrying.
-			case aurora.ResponseCode_INVALID_REQUEST,
-				aurora.ResponseCode_ERROR,
-				aurora.ResponseCode_AUTH_FAILED,
-				aurora.ResponseCode_JOB_UPDATING_ERROR:
-				c.logger.Printf("Terminal Response Code %v from Aurora, won't retry\n", resp.GetResponseCode().String())
-				return resp, errors.New(response.CombineMessage(resp))
-
-				// The only case that should fall down to here is a WARNING response code.
-				// It is currently not used as a response in the scheduler so it is unknown how to handle it.
-			default:
-				c.logger.DebugPrintf("unhandled response code %v received from Aurora\n", responseCode)
-				return nil, errors.Errorf("unhandled response code from Aurora %v", responseCode.String())
+				// Allow caller to provide a function which checks if the original call was successful before
+				// it timed out.
+				if verifyOnTimeout != nil {
+					if verifyResp, ok := verifyOnTimeout(); ok {
+						c.logger.Print("verified that the call went through successfully after a client timeout")
+						// Response here might be different than the original as it is no longer constructed
+						// by the scheduler but mimicked.
+						// This is OK since the scheduler is very unlikely to change responses at this point in its
+						// development cycle but we must be careful to not return an incorrectly constructed response.
+						return verifyResp, nil
+					}
+				}
 			}
+
+			// Retry the thrift payload
+			continue
 		}
 
+		// If there was no client error, but the response is nil, something went wrong.
+		// Ideally, we'll never encounter this but we're placing a safeguard here.
+		if resp == nil {
+			return nil, errors.New("response from aurora is nil")
+		}
+
+		// Check Response Code from thrift and make a decision to continue retrying or not.
+		switch responseCode := resp.GetResponseCode(); responseCode {
+
+		// If the thrift call succeeded, stop retrying
+		case aurora.ResponseCode_OK:
+			return resp, nil
+
+		// If the response code is transient, continue retrying
+		case aurora.ResponseCode_ERROR_TRANSIENT:
+			c.logger.Println("Aurora replied with Transient error code, retrying")
+			continue
+
+		// Failure scenarios, these indicate a bad payload or a bad clientConfig. Stop retrying.
+		case aurora.ResponseCode_INVALID_REQUEST,
+			aurora.ResponseCode_ERROR,
+			aurora.ResponseCode_AUTH_FAILED,
+			aurora.ResponseCode_JOB_UPDATING_ERROR:
+			c.logger.Printf("Terminal Response Code %v from Aurora, won't retry\n", resp.GetResponseCode().String())
+			return resp, errors.New(response.CombineMessage(resp))
+
+			// The only case that should fall down to here is a WARNING response code.
+			// It is currently not used as a response in the scheduler so it is unknown how to handle it.
+		default:
+			c.logger.DebugPrintf("unhandled response code %v received from Aurora\n", responseCode)
+			return nil, errors.Errorf("unhandled response code from Aurora %v", responseCode.String())
+		}
 	}
 
-	c.logger.DebugPrintf("it took %v retries to complete this operation\n", curStep)
-
 	if curStep > 1 {
-		c.config.logger.Printf("retried this thrift call %d time(s)", curStep)
+		c.config.logger.Printf("this thrift call was retried %d time(s)", curStep)
 	}
 
 	// Provide more information to the user wherever possible.
 	if clientErr != nil {
 		return nil, newRetryError(errors.Wrap(clientErr, "ran out of retries, including latest error"), curStep)
-	} else {
-		return nil, newRetryError(errors.New("ran out of retries"), curStep)
 	}
+
+	return nil, newRetryError(errors.New("ran out of retries"), curStep)
+}
+
+// isConnectionError processes the error received by the client.
+// The return values indicate whether this was determined to be a temporary error
+// and whether it was determined to be a timeout error
+func isConnectionError(err error) (bool, bool) {
+
+	// Determine if error is a temporary URL error by going up the stack
+	transportException, ok := err.(thrift.TTransportException)
+	if !ok {
+		return false, false
+	}
+
+	urlError, ok := transportException.Err().(*url.Error)
+	if !ok {
+		return false, false
+	}
+
+	// EOF error occurs when the server closes the read buffer of the client. This is common
+	// when the server is overloaded and we consider it temporary.
+	// All other which are not temporary as per the member function Temporary(),
+	// are considered not temporary (permanent).
+	if urlError.Err != io.EOF && !urlError.Temporary() {
+		return false, false
+	}
+
+	return true, urlError.Timeout()
 }

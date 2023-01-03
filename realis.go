@@ -315,11 +315,13 @@ func (c *Client) GetInstanceIds(key aurora.JobKey, states []aurora.ScheduleStatu
 		Statuses:    states,
 	}
 
-	c.logger.DebugPrintf("GetTasksWithoutConfigs Thrift Payload: %+v\n", taskQ)
+	c.logger.DebugPrintf("GetInstanceIds Thrift Payload: %+v\n", taskQ)
 
 	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.client.GetTasksWithoutConfigs(context.TODO(), taskQ)
-	})
+	},
+		nil,
+	)
 
 	// If we encountered an error we couldn't recover from by retrying, return an error to the user
 	if retryErr != nil {
@@ -341,8 +343,13 @@ func (c *Client) GetJobUpdateSummaries(jobUpdateQuery *aurora.JobUpdateQuery) (*
 
 	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.readonlyClient.GetJobUpdateSummaries(context.TODO(), jobUpdateQuery)
-	})
+	},
+		nil,
+	)
 
+	if resp == nil || resp.GetResult_() == nil || resp.GetResult_().GetGetJobUpdateSummariesResult_() == nil {
+		return nil, errors.New("unexpected response from scheduler")
+	}
 	if retryErr != nil {
 		return nil, errors.Wrap(retryErr, "error getting job update summaries from Aurora Scheduler")
 	}
@@ -354,8 +361,12 @@ func (c *Client) GetJobSummary(role string) (*aurora.JobSummaryResult_, error) {
 
 	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.readonlyClient.GetJobSummary(context.TODO(), role)
-	})
-
+	},
+		nil,
+	)
+	if resp == nil || resp.GetResult_() == nil || resp.GetResult_().GetJobSummaryResult_() == nil {
+		return nil, errors.New("unexpected response from scheduler")
+	}
 	if retryErr != nil {
 		return nil, errors.Wrap(retryErr, "error getting job summaries from Aurora Scheduler")
 	}
@@ -369,13 +380,15 @@ func (c *Client) GetJobs(role string) (*aurora.GetJobsResult_, error) {
 
 	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.readonlyClient.GetJobs(context.TODO(), role)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return result, errors.Wrap(retryErr, "error getting Jobs from Aurora Scheduler")
 	}
 
-	if resp.GetResult_() != nil {
+	if resp != nil && resp.GetResult_() != nil {
 		result = resp.GetResult_().GetJobsResult_
 	}
 
@@ -389,19 +402,19 @@ func (c *Client) KillInstances(key aurora.JobKey, instances ...int32) (bool, err
 
 	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.client.KillTasks(context.TODO(), &key, instances, "")
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return false, errors.Wrap(retryErr, "error sending Kill command to Aurora Scheduler")
 	}
 
-	if len(resp.GetDetails()) > 0 {
+	if resp == nil || len(resp.GetDetails()) > 0 {
 		c.logger.Println("KillTasks was called but no tasks killed as a result.")
 		return false, nil
-	} else {
-		return true, nil
 	}
-
+	return true, nil
 }
 
 func (c *Client) RealisConfig() *clientConfig {
@@ -416,7 +429,9 @@ func (c *Client) KillJob(key aurora.JobKey) error {
 	_, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		// Giving the KillTasks thrift call an empty set tells the Aurora scheduler to kill all active shards
 		return c.client.KillTasks(context.TODO(), &key, nil, "")
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return errors.Wrap(retryErr, "error sending Kill command to Aurora Scheduler")
@@ -438,9 +453,27 @@ func (c *Client) CreateJob(auroraJob *AuroraJob) error {
 		return errors.Wrap(err, "unable to create Thermos payload")
 	}
 
-	_, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
-		return c.client.CreateJob(context.TODO(), auroraJob.JobConfig())
-	})
+	// Response is checked by the thrift retry code
+	_, retryErr := c.thriftCallWithRetries(
+		false,
+		func() (*aurora.Response, error) {
+			return c.client.CreateJob(context.TODO(), auroraJob.JobConfig())
+		},
+		// On a client timeout, attempt to verify that payload made to the Scheduler by
+		// trying to get the config summary for the job key
+		func() (*aurora.Response, bool) {
+			exists, err := c.jobExists(auroraJob.JobKey())
+			if err != nil {
+				c.logger.Print("verification failed ", err)
+			}
+
+			if exists {
+				return &aurora.Response{ResponseCode: aurora.ResponseCode_OK}, true
+			}
+
+			return nil, false
+		},
+	)
 
 	if retryErr != nil {
 		return errors.Wrap(retryErr, "error sending Create command to Aurora Scheduler")
@@ -471,7 +504,9 @@ func (c *Client) ScheduleCronJob(auroraJob *AuroraJob) error {
 
 	_, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.client.ScheduleCronJob(context.TODO(), auroraJob.JobConfig())
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return errors.Wrap(retryErr, "error sending Cron AuroraJob Schedule message to Aurora Scheduler")
@@ -485,7 +520,9 @@ func (c *Client) DescheduleCronJob(key aurora.JobKey) error {
 
 	_, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.client.DescheduleCronJob(context.TODO(), &key)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return errors.Wrap(retryErr, "error sending Cron AuroraJob De-schedule message to Aurora Scheduler")
@@ -501,7 +538,9 @@ func (c *Client) StartCronJob(key aurora.JobKey) error {
 
 	_, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.client.StartCronJob(context.TODO(), &key)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return errors.Wrap(retryErr, "error sending Start Cron AuroraJob  message to Aurora Scheduler")
@@ -516,7 +555,9 @@ func (c *Client) RestartInstances(key aurora.JobKey, instances ...int32) error {
 
 	_, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.client.RestartShards(context.TODO(), &key, instances)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return errors.Wrap(retryErr, "error sending Restart command to Aurora Scheduler")
@@ -537,16 +578,17 @@ func (c *Client) RestartJob(key aurora.JobKey) error {
 	if len(instanceIds) > 0 {
 		_, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 			return c.client.RestartShards(context.TODO(), &key, instanceIds)
-		})
+		},
+			nil,
+		)
 
 		if retryErr != nil {
 			return errors.Wrap(retryErr, "error sending Restart command to Aurora Scheduler")
 		}
 
 		return nil
-	} else {
-		return errors.New("no tasks in the Active state")
 	}
+	return errors.New("no tasks in the Active state")
 }
 
 // Update all tasks under a job configuration. Currently gorealis doesn't support for canary deployments.
@@ -558,34 +600,82 @@ func (c *Client) StartJobUpdate(updateJob *JobUpdate, message string) (*aurora.S
 
 	c.logger.DebugPrintf("StartJobUpdate Thrift Payload: %+v %v\n", updateJob, message)
 
-	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
-		return c.client.StartJobUpdate(nil, updateJob.request, message)
-	})
+	resp, retryErr := c.thriftCallWithRetries(false,
+		func() (*aurora.Response, error) {
+			return c.client.StartJobUpdate(context.TODO(), updateJob.request, message)
+		},
+		func() (*aurora.Response, bool) {
+			key := updateJob.JobKey()
+			summariesResp, err := c.readonlyClient.GetJobUpdateSummaries(
+				context.TODO(),
+				&aurora.JobUpdateQuery{
+					JobKey:         &key,
+					UpdateStatuses: aurora.ACTIVE_JOB_UPDATE_STATES,
+					Limit:          1,
+				})
+
+			if err != nil {
+				c.logger.Print("verification failed ", err)
+				return nil, false
+			}
+
+			summaries := response.JobUpdateSummaries(summariesResp)
+			if len(summaries) == 0 {
+				return nil, false
+			}
+
+			return &aurora.Response{
+				ResponseCode: aurora.ResponseCode_OK,
+				Result_: &aurora.Result_{
+					StartJobUpdateResult_: &aurora.StartJobUpdateResult_{
+						UpdateSummary: summaries[0],
+						Key:           summaries[0].Key,
+					},
+				},
+			}, true
+		},
+	)
 
 	if retryErr != nil {
+		// A timeout took place when attempting this call, attempt to recover
+		if IsTimeout(retryErr) {
+			return nil, retryErr
+		}
+
 		return nil, errors.Wrap(retryErr, "error sending StartJobUpdate command to Aurora Scheduler")
 	}
 
-	if resp.GetResult_() != nil && resp.GetResult_().GetStartJobUpdateResult_() != nil {
+	if resp != nil && resp.GetResult_() != nil && resp.GetResult_().GetStartJobUpdateResult_() != nil {
 		return resp.GetResult_().GetStartJobUpdateResult_(), nil
 	}
 
 	return nil, errors.New("thrift error: Field in response is nil unexpectedly.")
 }
 
-// Abort AuroraJob Update on Aurora. Requires the updateId which can be obtained on the Aurora web UI.
+// AbortJobUpdate terminates a job update in the scheduler.
+// It requires the updateId which can be obtained on the Aurora web UI.
+// This API is meant to be synchronous. It will attempt to wait until the update transitions to the aborted state.
+// However, if the job update does not transition to the ABORT state an error will be returned.
 func (c *Client) AbortJobUpdate(updateKey aurora.JobUpdateKey, message string) error {
 
 	c.logger.DebugPrintf("AbortJobUpdate Thrift Payload: %+v %v\n", updateKey, message)
 
 	_, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.client.AbortJobUpdate(context.TODO(), &updateKey, message)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return errors.Wrap(retryErr, "error sending AbortJobUpdate command to Aurora Scheduler")
 	}
-	return nil
+	// Make this call synchronous by  blocking until it job has successfully transitioned to aborted
+	_, err := c.MonitorJobUpdateStatus(
+		updateKey,
+		[]aurora.JobUpdateStatus{aurora.JobUpdateStatus_ABORTED},
+		time.Second*5,
+		time.Minute)
+	return err
 }
 
 // Pause AuroraJob Update. UpdateID is returned from StartJobUpdate or the Aurora web UI.
@@ -605,7 +695,9 @@ func (c *Client) PauseJobUpdate(updateKey *aurora.JobUpdateKey, message string) 
 
 	_, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.client.PauseJobUpdate(nil, updateKeyLocal, message)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return errors.Wrap(retryErr, "error sending PauseJobUpdate command to Aurora Scheduler")
@@ -632,7 +724,9 @@ func (c *Client) ResumeJobUpdate(updateKey aurora.JobUpdateKey, message string) 
 
 	_, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.client.ResumeJobUpdate(context.TODO(), &updateKey, message)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return errors.Wrap(retryErr, "error sending ResumeJobUpdate command to Aurora Scheduler")
@@ -653,18 +747,18 @@ func (c *Client) PulseJobUpdate(updateKey aurora.JobUpdateKey) (aurora.JobUpdate
 
 	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.client.PulseJobUpdate(context.TODO(), &updateKey)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return aurora.JobUpdatePulseStatus(0), errors.Wrap(retryErr, "error sending PulseJobUpdate command to Aurora Scheduler")
 	}
 
-	if resp.GetResult_() != nil && resp.GetResult_().GetPulseJobUpdateResult_() != nil {
+	if resp != nil && resp.GetResult_() != nil && resp.GetResult_().GetPulseJobUpdateResult_() != nil {
 		return resp.GetResult_().GetPulseJobUpdateResult_().GetStatus(), nil
-	} else {
-		return aurora.JobUpdatePulseStatus(0), errors.New("thrift error, field was nil unexpectedly")
 	}
-
+	return aurora.JobUpdatePulseStatus(0), errors.New("thrift error, field was nil unexpectedly")
 }
 
 // Scale up the number of instances under a job configuration using the configuration for specific
@@ -681,7 +775,9 @@ func (c *Client) AddInstances(instKey aurora.InstanceKey, count int32) error {
 
 	_, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.client.AddInstances(context.TODO(), &instKey, count)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return errors.Wrap(retryErr, "error sending AddInstances command to Aurora Scheduler")
@@ -726,7 +822,9 @@ func (c *Client) GetTaskStatus(query *aurora.TaskQuery) ([]*aurora.ScheduledTask
 
 	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.client.GetTasksStatus(context.TODO(), query)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return nil, errors.Wrap(retryErr, "error querying Aurora Scheduler for task status")
@@ -742,7 +840,9 @@ func (c *Client) GetPendingReason(query *aurora.TaskQuery) ([]*aurora.PendingRea
 
 	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.client.GetPendingReason(context.TODO(), query)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return nil, errors.Wrap(retryErr, "error querying Aurora Scheduler for pending Reasons")
@@ -750,21 +850,24 @@ func (c *Client) GetPendingReason(query *aurora.TaskQuery) ([]*aurora.PendingRea
 
 	var result []*aurora.PendingReason
 
-	if resp.GetResult_() != nil {
+	if resp != nil && resp.GetResult_() != nil && resp.GetResult_().GetGetPendingReasonResult_() != nil {
 		result = resp.GetResult_().GetGetPendingReasonResult_().GetReasons()
 	}
 
 	return result, nil
 }
 
-// Get information about task including without a task configuration object
+// GetTasksWithoutConfigs gets information about task including without a task configuration object.
+// This is a more lightweight version of GetTaskStatus but contains less information as a result.
 func (c *Client) GetTasksWithoutConfigs(query *aurora.TaskQuery) ([]*aurora.ScheduledTask, error) {
 
 	c.logger.DebugPrintf("GetTasksWithoutConfigs Thrift Payload: %+v\n", query)
 
 	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.client.GetTasksWithoutConfigs(context.TODO(), query)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return nil, errors.Wrap(retryErr, "error querying Aurora Scheduler for task status without configs")
@@ -791,7 +894,9 @@ func (c *Client) FetchTaskConfig(instKey aurora.InstanceKey) (*aurora.TaskConfig
 
 	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.client.GetTasksStatus(context.TODO(), taskQ)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return nil, errors.Wrap(retryErr, "error querying Aurora Scheduler for task configuration")
@@ -817,17 +922,18 @@ func (c *Client) JobUpdateDetails(updateQuery aurora.JobUpdateQuery) ([]*aurora.
 
 	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.client.GetJobUpdateDetails(context.TODO(), &updateQuery)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return nil, errors.Wrap(retryErr, "unable to get job update details")
 	}
 
-	if resp.GetResult_() != nil && resp.GetResult_().GetGetJobUpdateDetailsResult_() != nil {
+	if resp != nil && resp.GetResult_() != nil && resp.GetResult_().GetGetJobUpdateDetailsResult_() != nil {
 		return resp.GetResult_().GetGetJobUpdateDetailsResult_().GetDetailsList(), nil
-	} else {
-		return nil, errors.New("unknown Thrift error, field is nil.")
 	}
+	return nil, errors.New("unknown Thrift error, field is nil.")
 }
 
 func (c *Client) RollbackJobUpdate(key aurora.JobUpdateKey, message string) error {
@@ -836,7 +942,9 @@ func (c *Client) RollbackJobUpdate(key aurora.JobUpdateKey, message string) erro
 
 	_, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.client.RollbackJobUpdate(context.TODO(), &key, message)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return errors.Wrap(retryErr, "unable to roll back job update")

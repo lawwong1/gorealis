@@ -40,7 +40,7 @@ func init() {
 	}
 }
 
-// TerminalJobUpdateStates returns a slice containing all the terminal states an update may end up in.
+// TerminalUpdateStates returns a slice containing all the terminal states an update may be in.
 // This is a function in order to avoid having a slice that can be accidentally mutated.
 func TerminalUpdateStates() []aurora.JobUpdateStatus {
 	return []aurora.JobUpdateStatus{

@@ -37,7 +37,9 @@ func (c *Client) DrainHosts(hosts ...string) ([]*aurora.HostStatus, error) {
 
 	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.adminClient.DrainHosts(context.TODO(), drainList)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return nil, errors.Wrap(retryErr, "unable to recover connection")
@@ -45,9 +47,8 @@ func (c *Client) DrainHosts(hosts ...string) ([]*aurora.HostStatus, error) {
 
 	if resp.GetResult_() != nil && resp.GetResult_().GetDrainHostsResult_() != nil {
 		return resp.GetResult_().GetDrainHostsResult_().GetStatuses(), nil
-	} else {
-		return nil, errors.New("thrift error: Field in response is nil unexpectedly.")
 	}
+	return nil, errors.New("thrift error: Field in response is nil unexpectedly.")
 }
 
 // Start SLA Aware Drain.
@@ -78,7 +79,9 @@ func (c *Client) SLADrainHosts(policy *aurora.SlaPolicy, timeout int64, hosts ..
 
 	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.adminClient.SlaDrainHosts(context.TODO(), drainList, policy, timeout)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return nil, errors.Wrap(retryErr, "unable to recover connection")
@@ -86,9 +89,8 @@ func (c *Client) SLADrainHosts(policy *aurora.SlaPolicy, timeout int64, hosts ..
 
 	if resp.GetResult_() != nil && resp.GetResult_().GetDrainHostsResult_() != nil {
 		return resp.GetResult_().GetDrainHostsResult_().GetStatuses(), nil
-	} else {
-		return nil, errors.New("thrift error: Field in response is nil unexpectedly.")
 	}
+	return nil, errors.New("thrift error: Field in response is nil unexpectedly.")
 }
 
 func (c *Client) StartMaintenance(hosts ...string) ([]*aurora.HostStatus, error) {
@@ -104,7 +106,9 @@ func (c *Client) StartMaintenance(hosts ...string) ([]*aurora.HostStatus, error)
 
 	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.adminClient.StartMaintenance(context.TODO(), hostList)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return nil, errors.Wrap(retryErr, "unable to recover connection")
@@ -112,9 +116,8 @@ func (c *Client) StartMaintenance(hosts ...string) ([]*aurora.HostStatus, error)
 
 	if resp.GetResult_() != nil && resp.GetResult_().GetStartMaintenanceResult_() != nil {
 		return resp.GetResult_().GetStartMaintenanceResult_().GetStatuses(), nil
-	} else {
-		return nil, errors.New("thrift error: Field in response is nil unexpectedly.")
 	}
+	return nil, errors.New("thrift error: Field in response is nil unexpectedly.")
 }
 
 func (c *Client) EndMaintenance(hosts ...string) ([]*aurora.HostStatus, error) {
@@ -130,7 +133,9 @@ func (c *Client) EndMaintenance(hosts ...string) ([]*aurora.HostStatus, error) {
 
 	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.adminClient.EndMaintenance(context.TODO(), hostList)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return nil, errors.Wrap(retryErr, "unable to recover connection")
@@ -138,9 +143,8 @@ func (c *Client) EndMaintenance(hosts ...string) ([]*aurora.HostStatus, error) {
 
 	if resp.GetResult_() != nil && resp.GetResult_().GetEndMaintenanceResult_() != nil {
 		return resp.GetResult_().GetEndMaintenanceResult_().GetStatuses(), nil
-	} else {
-		return nil, errors.New("thrift error: Field in response is nil unexpectedly.")
 	}
+	return nil, errors.New("thrift error: Field in response is nil unexpectedly.")
 
 }
 
@@ -161,7 +165,9 @@ func (c *Client) MaintenanceStatus(hosts ...string) (*aurora.MaintenanceStatusRe
 	// and continue trying to resend command until we run out of retries.
 	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.adminClient.MaintenanceStatus(context.TODO(), hostList)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return result, errors.Wrap(retryErr, "unable to recover connection")
@@ -189,7 +195,9 @@ func (c *Client) SetQuota(role string, cpu *float64, ramMb *int64, diskMb *int64
 
 	_, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.adminClient.SetQuota(context.TODO(), role, quota)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return errors.Wrap(retryErr, "unable to set role quota")
@@ -203,7 +211,9 @@ func (c *Client) GetQuota(role string) (*aurora.GetQuotaResult_, error) {
 
 	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.adminClient.GetQuota(context.TODO(), role)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return nil, errors.Wrap(retryErr, "unable to get role quota")
@@ -211,9 +221,8 @@ func (c *Client) GetQuota(role string) (*aurora.GetQuotaResult_, error) {
 
 	if resp.GetResult_() != nil {
 		return resp.GetResult_().GetGetQuotaResult_(), nil
-	} else {
-		return nil, errors.New("thrift error: Field in response is nil unexpectedly.")
 	}
+	return nil, errors.New("thrift error: Field in response is nil unexpectedly.")
 }
 
 // Force Aurora Scheduler to perform a snapshot and write to Mesos log
@@ -221,7 +230,9 @@ func (c *Client) Snapshot() error {
 
 	_, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.adminClient.Snapshot(context.TODO())
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return errors.Wrap(retryErr, "unable to recover connection")
@@ -235,7 +246,9 @@ func (c *Client) PerformBackup() error {
 
 	_, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.adminClient.PerformBackup(context.TODO())
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return errors.Wrap(retryErr, "unable to recover connection")
@@ -249,7 +262,9 @@ func (c *Client) ForceImplicitTaskReconciliation() error {
 
 	_, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.adminClient.TriggerImplicitTaskReconciliation(context.TODO())
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return errors.Wrap(retryErr, "unable to recover connection")
@@ -270,7 +285,9 @@ func (c *Client) ForceExplicitTaskReconciliation(batchSize *int32) error {
 
 	_, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.adminClient.TriggerExplicitTaskReconciliation(context.TODO(), settings)
-	})
+	},
+		nil,
+	)
 
 	if retryErr != nil {
 		return errors.Wrap(retryErr, "unable to recover connection")
