@@ -116,7 +116,7 @@ type auroraThriftCall func() (resp *aurora.Response, err error)
 
 // verifyOntimeout defines the type of function that will be used to verify whether a Thirft call to the Scheduler
 // made it to the scheduler or not. In general, these types of functions will have to interact with the scheduler
-// through the very same Thrift API which previously encountered a time out from the client.
+// through the very same Thrift API which previously encountered a time-out from the client.
 // This means that the functions themselves should be kept to a minimum number of Thrift calls.
 // It should also be noted that this is a best effort mechanism and
 // is likely to fail for the same reasons that the original call failed.
