@@ -477,13 +477,15 @@ func TestRealisClient_CreateService(t *testing.T) {
 	var ok bool
 	var mErr error
 
-	if ok, mErr = r.MonitorJobUpdate(*result.GetKey(), 5*time.Second, 4*time.Minute); !ok || mErr != nil {
-		// Update may already be in a terminal state so don't check for error
-		err := r.AbortJobUpdate(*result.GetKey(), "Monitor timed out.")
+	if result != nil {
+		if ok, mErr = r.MonitorJobUpdate(*result.GetKey(), 5*time.Second, 4*time.Minute); !ok || mErr != nil {
+			// Update may already be in a terminal state so don't check for error
+			err := r.AbortJobUpdate(*result.GetKey(), "Monitor timed out.")
 
-		err = r.KillJob(job.JobKey())
+			err = r.KillJob(job.JobKey())
 
-		assert.NoError(t, err)
+			assert.NoError(t, err)
+		}
 	}
 
 	assert.True(t, ok)
