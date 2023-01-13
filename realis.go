@@ -602,7 +602,7 @@ func (c *Client) StartJobUpdate(updateJob *JobUpdate, message string) (*aurora.S
 
 	resp, retryErr := c.thriftCallWithRetries(false,
 		func() (*aurora.Response, error) {
-			return c.client.StartJobUpdate(nil, updateJob.request, message)
+			return c.client.StartJobUpdate(context.TODO(), updateJob.request, message)
 		},
 		func() (*aurora.Response, bool) {
 			key := updateJob.JobKey()
