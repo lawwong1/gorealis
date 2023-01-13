@@ -25,8 +25,17 @@ jobs:
       run: echo GO_USR_DIRS=$(go list -f {{.Dir}} ./... | grep -E -v "/gen-go/|/vendor/") >> $GITHUB_ENV
     - name: Run goimports check
       run: test -z "`for d in $GO_USR_DIRS; do goimports -d $d/*.go | tee /dev/stderr; done`"
-    - name: Run docker desktop 20.10.10
-      run: sudo apt-get install https://download.docker.com/linux/ubuntu/dists/xenial/pool/stable/amd64/docker-ce-cli_20.10.7~3-0~ubuntu-xenial_amd64.deb
+    - name: Check Docker Version
+      run: docker --version
+    - name: Install Latest Docker
+      run: |
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+          sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu  $(lsb_release -cs)  stable"
+          sudo apt-get update
+          sudo apt-get install docker-ce=20.10.7~ce~3-0~ubuntu
+    - name: Check Docker Version
+      run: docker --version
+
     - name: Create aurora/mesos docker cluster
       run: docker-compose up -d
     - name: Run tests
