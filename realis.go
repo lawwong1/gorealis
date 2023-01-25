@@ -376,8 +376,6 @@ func (c *Client) GetJobSummary(role string) (*aurora.JobSummaryResult_, error) {
 
 func (c *Client) GetJobs(role string) (*aurora.GetJobsResult_, error) {
 
-	var result *aurora.GetJobsResult_
-
 	resp, retryErr := c.thriftCallWithRetries(false, func() (*aurora.Response, error) {
 		return c.readonlyClient.GetJobs(context.TODO(), role)
 	},
@@ -385,14 +383,13 @@ func (c *Client) GetJobs(role string) (*aurora.GetJobsResult_, error) {
 	)
 
 	if retryErr != nil {
-		return result, errors.Wrap(retryErr, "error getting Jobs from Aurora Scheduler")
+		return nil, errors.Wrap(retryErr, "error getting Jobs from Aurora Scheduler")
+	}
+	if resp == nil || resp.GetResult_() == nil {
+		return nil, errors.New("unexpected response from scheduler")
 	}
 
-	if resp != nil && resp.GetResult_() != nil {
-		result = resp.GetResult_().GetJobsResult_
-	}
-
-	return result, nil
+	return resp.GetResult_().GetJobsResult_, nil
 }
 
 // Kill specific instances of a job. Returns true, nil if a task was actually killed as a result of this API call.
@@ -462,7 +459,7 @@ func (c *Client) CreateJob(auroraJob *AuroraJob) error {
 		// On a client timeout, attempt to verify that payload made to the Scheduler by
 		// trying to get the config summary for the job key
 		func() (*aurora.Response, bool) {
-			exists, err := c.jobExists(auroraJob.JobKey())
+			exists, err := c.JobExists(auroraJob.JobKey())
 			if err != nil {
 				c.logger.Print("verification failed ", err)
 			}
@@ -644,12 +641,10 @@ func (c *Client) StartJobUpdate(updateJob *JobUpdate, message string) (*aurora.S
 
 		return nil, errors.Wrap(retryErr, "error sending StartJobUpdate command to Aurora Scheduler")
 	}
-
-	if resp != nil && resp.GetResult_() != nil && resp.GetResult_().GetStartJobUpdateResult_() != nil {
-		return resp.GetResult_().GetStartJobUpdateResult_(), nil
+	if resp == nil || resp.GetResult_() == nil || resp.GetResult_().GetStartJobUpdateResult_() == nil {
+		return nil, errors.New("unexpected response from scheduler")
 	}
-
-	return nil, errors.New("thrift error: Field in response is nil unexpectedly.")
+	return resp.GetResult_().GetStartJobUpdateResult_(), nil
 }
 
 // AbortJobUpdate terminates a job update in the scheduler.
@@ -755,10 +750,11 @@ func (c *Client) PulseJobUpdate(updateKey aurora.JobUpdateKey) (aurora.JobUpdate
 		return aurora.JobUpdatePulseStatus(0), errors.Wrap(retryErr, "error sending PulseJobUpdate command to Aurora Scheduler")
 	}
 
-	if resp != nil && resp.GetResult_() != nil && resp.GetResult_().GetPulseJobUpdateResult_() != nil {
-		return resp.GetResult_().GetPulseJobUpdateResult_().GetStatus(), nil
+	if resp == nil || resp.GetResult_() == nil || resp.GetResult_().GetPulseJobUpdateResult_() == nil {
+		return aurora.JobUpdatePulseStatus(0), errors.New("unexpected response from scheduler")
 	}
-	return aurora.JobUpdatePulseStatus(0), errors.New("thrift error, field was nil unexpectedly")
+
+	return resp.GetResult_().GetPulseJobUpdateResult_().GetStatus(), nil
 }
 
 // Scale up the number of instances under a job configuration using the configuration for specific
@@ -829,6 +825,9 @@ func (c *Client) GetTaskStatus(query *aurora.TaskQuery) ([]*aurora.ScheduledTask
 	if retryErr != nil {
 		return nil, errors.Wrap(retryErr, "error querying Aurora Scheduler for task status")
 	}
+	if resp == nil {
+		return nil, errors.New("unexpected response from scheduler")
+	}
 
 	return response.ScheduleStatusResult(resp).GetTasks(), nil
 }
@@ -848,13 +847,11 @@ func (c *Client) GetPendingReason(query *aurora.TaskQuery) ([]*aurora.PendingRea
 		return nil, errors.Wrap(retryErr, "error querying Aurora Scheduler for pending Reasons")
 	}
 
-	var result []*aurora.PendingReason
-
-	if resp != nil && resp.GetResult_() != nil && resp.GetResult_().GetGetPendingReasonResult_() != nil {
-		result = resp.GetResult_().GetGetPendingReasonResult_().GetReasons()
+	if resp == nil || resp.GetResult_() == nil || resp.GetResult_().GetGetPendingReasonResult_() == nil {
+		return nil, errors.New("unexpected response from scheduler")
 	}
 
-	return result, nil
+	return resp.GetResult_().GetGetPendingReasonResult_().GetReasons(), nil
 }
 
 // GetTasksWithoutConfigs gets information about task including without a task configuration object.
@@ -930,10 +927,11 @@ func (c *Client) JobUpdateDetails(updateQuery aurora.JobUpdateQuery) ([]*aurora.
 		return nil, errors.Wrap(retryErr, "unable to get job update details")
 	}
 
-	if resp != nil && resp.GetResult_() != nil && resp.GetResult_().GetGetJobUpdateDetailsResult_() != nil {
-		return resp.GetResult_().GetGetJobUpdateDetailsResult_().GetDetailsList(), nil
+	if resp == nil || resp.GetResult_() == nil || resp.GetResult_().GetGetJobUpdateDetailsResult_() == nil {
+		return nil, errors.New("unexpected response from scheduler")
 	}
-	return nil, errors.New("unknown Thrift error, field is nil.")
+
+	return resp.GetResult_().GetGetJobUpdateDetailsResult_().GetDetailsList(), nil
 }
 
 func (c *Client) RollbackJobUpdate(key aurora.JobUpdateKey, message string) error {

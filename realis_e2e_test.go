@@ -1447,3 +1447,49 @@ func TestRealisClient_FitTasks(t *testing.T) {
 		}
 	}
 }
+
+func TestRealisClient_JobExists(t *testing.T) {
+	role := "vagrant"
+	env := "prod"
+	name := "test_job_exists"
+	// Create a good single job
+	job := realis.NewJob().
+		Environment(env).
+		Role(role).
+		Name(name).
+		ThermosExecutor(thermosExec).
+		CPU(.25).
+		RAM(4).
+		Disk(10).
+		InstanceCount(3).
+		IsService(true).
+		Production(false).
+		Tier("preemptible").
+		Priority(0)
+
+	err := r.CreateJob(job)
+	assert.NoError(t, err)
+
+	exists, err := r.JobExists(job.JobKey())
+	assert.NoError(t, err)
+	assert.True(t, exists)
+
+	// Create a single bad job
+	badJob := realis.NewJob().
+		Environment("prod").
+		Role("vagrant").
+		Name("executordoesntexist").
+		ExecutorName("idontexist").
+		ExecutorData("").
+		CPU(.25).
+		RAM(4).
+		Disk(10).
+		InstanceCount(1)
+
+	err = r.CreateJob(badJob)
+	assert.Error(t, err)
+
+	exists, err = r.JobExists(badJob.JobKey())
+	assert.NoError(t, err)
+	assert.False(t, exists)
+}

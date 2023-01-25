@@ -45,10 +45,11 @@ func (c *Client) DrainHosts(hosts ...string) ([]*aurora.HostStatus, error) {
 		return nil, errors.Wrap(retryErr, "unable to recover connection")
 	}
 
-	if resp.GetResult_() != nil && resp.GetResult_().GetDrainHostsResult_() != nil {
-		return resp.GetResult_().GetDrainHostsResult_().GetStatuses(), nil
+	if resp == nil || resp.GetResult_() == nil || resp.GetResult_().GetDrainHostsResult_() == nil {
+		return nil, errors.New("unexpected response from scheduler")
 	}
-	return nil, errors.New("thrift error: Field in response is nil unexpectedly.")
+
+	return resp.GetResult_().GetDrainHostsResult_().GetStatuses(), nil
 }
 
 // Start SLA Aware Drain.
@@ -87,10 +88,11 @@ func (c *Client) SLADrainHosts(policy *aurora.SlaPolicy, timeout int64, hosts ..
 		return nil, errors.Wrap(retryErr, "unable to recover connection")
 	}
 
-	if resp.GetResult_() != nil && resp.GetResult_().GetDrainHostsResult_() != nil {
-		return resp.GetResult_().GetDrainHostsResult_().GetStatuses(), nil
+	if resp == nil || resp.GetResult_() == nil || resp.GetResult_().GetDrainHostsResult_() == nil {
+		return nil, errors.New("unexpected response from scheduler")
 	}
-	return nil, errors.New("thrift error: Field in response is nil unexpectedly.")
+
+	return resp.GetResult_().GetDrainHostsResult_().GetStatuses(), nil
 }
 
 func (c *Client) StartMaintenance(hosts ...string) ([]*aurora.HostStatus, error) {
@@ -114,10 +116,11 @@ func (c *Client) StartMaintenance(hosts ...string) ([]*aurora.HostStatus, error)
 		return nil, errors.Wrap(retryErr, "unable to recover connection")
 	}
 
-	if resp.GetResult_() != nil && resp.GetResult_().GetStartMaintenanceResult_() != nil {
-		return resp.GetResult_().GetStartMaintenanceResult_().GetStatuses(), nil
+	if resp == nil || resp.GetResult_() == nil || resp.GetResult_().GetStartMaintenanceResult_() == nil {
+		return nil, errors.New("unexpected response from scheduler")
 	}
-	return nil, errors.New("thrift error: Field in response is nil unexpectedly.")
+
+	return resp.GetResult_().GetStartMaintenanceResult_().GetStatuses(), nil
 }
 
 func (c *Client) EndMaintenance(hosts ...string) ([]*aurora.HostStatus, error) {
@@ -140,18 +143,13 @@ func (c *Client) EndMaintenance(hosts ...string) ([]*aurora.HostStatus, error) {
 	if retryErr != nil {
 		return nil, errors.Wrap(retryErr, "unable to recover connection")
 	}
-
-	if resp.GetResult_() != nil && resp.GetResult_().GetEndMaintenanceResult_() != nil {
-		return resp.GetResult_().GetEndMaintenanceResult_().GetStatuses(), nil
+	if resp == nil || resp.GetResult_() == nil || resp.GetResult_().GetEndMaintenanceResult_() == nil {
+		return nil, errors.New("unexpected response from scheduler")
 	}
-	return nil, errors.New("thrift error: Field in response is nil unexpectedly.")
-
+	return resp.GetResult_().GetEndMaintenanceResult_().GetStatuses(), nil
 }
 
 func (c *Client) MaintenanceStatus(hosts ...string) (*aurora.MaintenanceStatusResult_, error) {
-
-	var result *aurora.MaintenanceStatusResult_
-
 	if len(hosts) == 0 {
 		return nil, errors.New("no hosts provided to get maintenance status from")
 	}
@@ -170,14 +168,13 @@ func (c *Client) MaintenanceStatus(hosts ...string) (*aurora.MaintenanceStatusRe
 	)
 
 	if retryErr != nil {
-		return result, errors.Wrap(retryErr, "unable to recover connection")
+		return nil, errors.Wrap(retryErr, "unable to recover connection")
+	}
+	if resp == nil || resp.GetResult_() == nil {
+		return nil, errors.New("unexpected response from scheduler")
 	}
 
-	if resp.GetResult_() != nil {
-		result = resp.GetResult_().GetMaintenanceStatusResult_()
-	}
-
-	return result, nil
+	return resp.GetResult_().GetMaintenanceStatusResult_(), nil
 }
 
 // SetQuota sets a quota aggregate for the given role
@@ -219,10 +216,10 @@ func (c *Client) GetQuota(role string) (*aurora.GetQuotaResult_, error) {
 		return nil, errors.Wrap(retryErr, "unable to get role quota")
 	}
 
-	if resp.GetResult_() != nil {
-		return resp.GetResult_().GetGetQuotaResult_(), nil
+	if resp == nil || resp.GetResult_() == nil {
+		return nil, errors.New("unexpected response from scheduler")
 	}
-	return nil, errors.New("thrift error: Field in response is nil unexpectedly.")
+	return resp.GetResult_().GetGetQuotaResult_(), nil
 }
 
 // Force Aurora Scheduler to perform a snapshot and write to Mesos log
