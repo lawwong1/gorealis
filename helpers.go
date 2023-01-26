@@ -12,12 +12,12 @@ func (r *Client) JobExists(key aurora.JobKey) (bool, error) {
 		return false, err
 	}
 
-	return !(resp == nil ||
-			resp.GetResult_() == nil ||
-			resp.GetResult_().GetConfigSummaryResult_() == nil ||
-			resp.GetResult_().GetConfigSummaryResult_().GetSummary() == nil ||
-			resp.GetResult_().GetConfigSummaryResult_().GetSummary().GetGroups() == nil ||
-			len(resp.GetResult_().GetConfigSummaryResult_().GetSummary().GetGroups()) == 0 ||
-			resp.GetResponseCode() != aurora.ResponseCode_OK),
+	return resp != nil &&
+			resp.GetResult_() != nil &&
+			resp.GetResult_().GetConfigSummaryResult_() != nil &&
+			resp.GetResult_().GetConfigSummaryResult_().GetSummary() != nil &&
+			resp.GetResult_().GetConfigSummaryResult_().GetSummary().GetGroups() != nil &&
+			len(resp.GetResult_().GetConfigSummaryResult_().GetSummary().GetGroups()) > 0 &&
+			resp.GetResponseCode() == aurora.ResponseCode_OK,
 		nil
 }

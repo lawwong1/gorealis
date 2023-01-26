@@ -1467,10 +1467,15 @@ func TestRealisClient_JobExists(t *testing.T) {
 		Tier("preemptible").
 		Priority(0)
 
-	err := r.CreateJob(job)
+	// Check if job exists before creating
+	exists, err := r.JobExists(job.JobKey())
+	assert.NoError(t, err)
+	assert.False(t, exists)
+
+	err = r.CreateJob(job)
 	assert.NoError(t, err)
 
-	exists, err := r.JobExists(job.JobKey())
+	exists, err = r.JobExists(job.JobKey())
 	assert.NoError(t, err)
 	assert.True(t, exists)
 
@@ -1485,6 +1490,11 @@ func TestRealisClient_JobExists(t *testing.T) {
 		RAM(4).
 		Disk(10).
 		InstanceCount(1)
+
+	// Check if job exists before creating
+	exists, err = r.JobExists(badJob.JobKey())
+	assert.NoError(t, err)
+	assert.False(t, exists)
 
 	err = r.CreateJob(badJob)
 	assert.Error(t, err)
